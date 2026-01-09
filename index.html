@@ -1,37 +1,68 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MINECRAFT 2D</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>2D Game</title>
 
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            background: #72a7ff;
-            font-family: Arial, sans-serif;
-            touch-action: none;
-        }
-        canvas {
-            display: block;
-            image-rendering: pixelated;
-        }
-    </style>
+<style>
+    body {
+        margin: 0;
+        overflow: hidden;
+        background: #72a7ff;
+        touch-action: none;
+    }
+
+    canvas {
+        display: block;
+        image-rendering: pixelated;
+    }
+
+    .controls {
+        position: fixed;
+        bottom: 20px;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: space-between;
+        padding: 0 30px;
+        z-index: 10;
+    }
+
+    .group {
+        display: flex;
+        gap: 15px;
+    }
+
+    .btn {
+        width: 65px;
+        height: 65px;
+        background: rgba(0,0,0,0.6);
+        color: white;
+        font-size: 26px;
+        border-radius: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        user-select: none;
+    }
+</style>
 </head>
 
 <body>
 
 <canvas id="gameCanvas"></canvas>
 
-<div style="position:fixed;bottom:20px;left:20px;z-index:10;">
-    <button id="leftBtn">◀</button>
-    <button id="rightBtn">▶</button>
-    <button id="jumpBtn">⬆</button>
+<div class="controls">
+    <div class="group">
+        <div class="btn" id="leftBtn">◀</div>
+        <div class="btn" id="rightBtn">▶</div>
+    </div>
+    <div class="group">
+        <div class="btn" id="jumpBtn">⬆</div>
+    </div>
 </div>
 
-<!-- سيبهم زي ما هم -->
 <script src="physics.js"></script>
 <script src="storage.js"></script>
 <script src="game.js"></script>
@@ -39,14 +70,16 @@
 <script>
     let moveL = false, moveR = false, moveJ = false;
 
-    document.getElementById("leftBtn").onpointerdown = () => moveL = true;
-    document.getElementById("leftBtn").onpointerup   = () => moveL = false;
+    const bind = (id, on, off) => {
+        const el = document.getElementById(id);
+        el.onpointerdown = e => { e.preventDefault(); on(); };
+        el.onpointerup   = off;
+        el.onpointerleave = off;
+    };
 
-    document.getElementById("rightBtn").onpointerdown = () => moveR = true;
-    document.getElementById("rightBtn").onpointerup   = () => moveR = false;
-
-    document.getElementById("jumpBtn").onpointerdown = () => moveJ = true;
-    document.getElementById("jumpBtn").onpointerup   = () => moveJ = false;
+    bind("leftBtn",  () => moveL = true, () => moveL = false);
+    bind("rightBtn", () => moveR = true, () => moveR = false);
+    bind("jumpBtn",  () => moveJ = true, () => moveJ = false);
 </script>
 
 </body>

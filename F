@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ماينكرافت إكسبلورر 2D</title>
+    <style>
+        :root { --sky: #72a7ff; --grass: #59a135; --dirt: #866043; --stone: #7a7a7a; --gold: #d4af37; }
+        body { margin: 0; overflow: hidden; background: var(--sky); font-family: 'Segoe UI', sans-serif; touch-action: none; }
+        canvas { display: block; image-rendering: pixelated; }
+
+        /* الهيدر الملكي */
+        .game-header { position: fixed; top: 0; width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; background: rgba(0,0,0,0.5); border-bottom: 2px solid var(--gold); box-sizing: border-box; z-index: 1000; }
+        .nav-btn { background: #222; color: var(--gold); border: 1px solid var(--gold); border-radius: 8px; padding: 5px 12px; cursor: pointer; font-weight: bold; }
+
+        /* أزرار التحكم للموبايل */
+        .controls { position: fixed; bottom: 30px; width: 100%; display: flex; justify-content: space-between; padding: 0 25px; box-sizing: border-box; z-index: 1000; pointer-events: none; }
+        .btn-circle { 
+            width: 75px; height: 75px; background: rgba(0,0,0,0.6); color: white; border: 3px solid #fff; 
+            border-radius: 20px; display: flex; align-items: center; justify-content: center; 
+            font-size: 30px; pointer-events: auto; user-select: none; -webkit-user-select: none;
+        }
+        .btn-circle:active { background: rgba(255,255,255,0.4); transform: scale(0.9); }
+
+        /* شريط الأدوات (Hotbar) */
+        .hotbar { 
+            position: fixed; top: 60px; left: 50%; transform: translateX(-50%); 
+            display: flex; gap: 8px; background: rgba(0,0,0,0.8); padding: 8px; border-radius: 12px; z-index: 900;
+        }
+        .slot { width: 45px; height: 45px; border: 3px solid #555; cursor: pointer; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: white; }
+        .slot.active { border-color: var(--gold); box-shadow: 0 0 10px var(--gold); }
+
+        #msg { position: fixed; top: 120px; left: 20px; color: white; background: rgba(0,0,0,0.5); padding: 5px 15px; border-radius: 20px; font-size: 14px; pointer-events: none; }
+    </style>
+</head>
+<body>
+
+    <div class="game-header">
+        <button class="nav-btn" onclick="location.reload()">🔄 إعادة</button>
+        <div style="color: var(--gold); font-weight: bold;">MINECRAFT V16</div>
+        <button class="nav-btn" onclick="toggleBuildMode()" id="modeLabel">🔨 كسر</button>
+    </div>
+
+    <div id="msg">الوضع الحالي: كسر وتعدين</div>
+
+    <div class="hotbar">
+        <div class="slot active" style="background: var(--grass);" onclick="selectBlock(1, this)">عشب</div>
+        <div class="slot" style="background: var(--dirt);" onclick="selectBlock(2, this)">تراب</div>
+        <div class="slot" style="background: var(--stone);" onclick="selectBlock(3, this)">حجر</div>
+        <div class="slot" style="background: #5d4037;" onclick="selectBlock(4, this)">خشب</div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div class="controls">
+        <div style="display: flex; gap: 15px;">
+            <div class="btn-circle" id="leftBtn">◀</div>
+            <div class="btn-circle" id="rightBtn">▶</div>
+        </div>
+        <div style="display: flex; gap: 15px;">
+            <div class="btn-circle" id="jumpBtn">⬆</div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // --- إعدادات العالم ---
+        const blockSize = 32;
+        const worldWidth = 200; // عرض الخريطة
+        const worldHeight = 40; 
+        let world = [];
+        let player = { 
+            x: 50 * blockSize, y: 10 * blockSize, 
+            w: 22, h: 40, vx: 0, vy: 0, 
+            speed: 5, jump: -12, onGround: false 
+        };
+        let camera = { x: 0, y: 0 };
+        let buildMode = false; // false = mining, true = building
+        let selectedBlockType = 1;
+
+        // --- توليد العالم ---
+        function generateWorld() {
+            for (let x = 0; x < worldWidth; x++) {
+                world[x] = [];
+                // إنشاء تلال باستخدام Sin Wave
+                let groundLevel = 20 + Math.floor(Math.sin(x * 0.15) * 5);
+                for (let y = 0; y < worldHeight; y++) {
+                    let type = 0; // سماء
+                    if (y > groundLevel + 1) type = 3; // صخور
+                    else if (y > groundLevel) type = 2; // تراب
+                    else if (y === groundLevel) type = 1; // عشب
+                    world[x][y] = type;
+                }
+            }
+        }
+
+        const blockColors = { 1: '#59a135', 2: '#866043', 3: '#7a7a7a', 4: '#5d4037' };
+
+        // --- التحكم باللمس ---
+        let moveL = false, moveR = false, moveJ = false;
+        const bind = (id, start, end) => {
+            const el = document.getElementById(id);
+            el.addEventListener('pointerdown', (e) => { e.preventDefault(); start(); });
+            el.addEventListener('pointerup', (e) => { e.preventDefault(); end(); });
+            el.addEventListener('pointerleave', (e) => { e.preventDefault(); end(); });
+        };
+        bind('leftBtn', () => moveL = true, () => moveL = false);
+        bind('rightBtn', () => moveR = true, () => moveR = false);
+        bind('jumpBtn', () => moveJ = true, () => moveJ = false);
+
+        function toggleBuildMode() {
+            buildMode = !buildMode;
+            document.getElementById('modeLabel').innerText = buildMode ? "🧱 بناء" : "🔨 كسر";
+            document.getElementById('msg').innerText = buildMode ? "الوضع الحالي: بناء بلوكات" : "الوضع الحالي: كسر وتعدين";
+        }
+
+        function selectBlock(type, el) {
+            selectedBlockType = type;
+            document.querySelectorAll('.slot').forEach(s => s.classList.remove('active'));
+            el.classList.add('active');
+        }
+
+        // --- تفاعل البناء والتكسير ---
+        canvas.addEventListener('pointerdown', (e) => {
+            const bx = Math.floor((e.clientX + camera.x) / blockSize);
+            const by = Math.floor((e.clientY + camera.y) / blockSize);
+            
+            if (world[bx] && by >= 0 && by < worldHeight) {
+                if (buildMode) {
+                    if (world[bx][by] === 0) world[bx][by] = selectedBlockType;
+                } else {
+                    world[bx][by] = 0;
+                }
+            }
+        });
+
+        // --- فيزياء الحركة ---
+        function update() {
+            if (moveL) player.vx = -player.speed;
+            else if (moveR) player.vx = player.speed;
+            else player.vx *= 0.8;
+
+            if (moveJ && player.onGround) {
+                player.vy = player.jump;
+                player.onGround = false;
+            }
+
+            player.vy += 0.8; // الجاذبية
+            player.x += player.vx;
+            checkCollision(true);
+            player.y += player.vy;
+            checkCollision(false);
+
+            // حدود العالم
+            if (player.y > (worldHeight - 2) * blockSize) player.y = 10 * blockSize;
+
+            // تحديث الكاميرا
+            camera.x = player.x - canvas.width / 2;
+            camera.y = player.y - canvas.height / 2;
+        }
+
+        function checkCollision(horizontal) {
+            let l = Math.floor(player.x / blockSize);
+            let r = Math.floor((player.x + player.w) / blockSize);
+            let t = Math.floor(player.y / blockSize);
+            let b = Math.floor((player.y + player.h) / blockSize);
+
+            for (let x = l; x <= r; x++) {
+                for (let y = t; y <= b; y++) {
+                    if (world[x] && world[x][y] !== 0) {
+                        if (horizontal) {
+                            if (player.vx > 0) player.x = x * blockSize - player.w;
+                            if (player.vx < 0) player.x = (x + 1) * blockSize;
+                            player.vx = 0;
+                        } else {
+                            if (player.vy > 0) {
+                                player.y = y * blockSize - player.h;
+                                player.onGround = true;
+                                player.vy = 0;
+                            } else if (player.vy < 0) {
+                                player.y = (y + 1) * blockSize;
+                                player.vy = 0;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- الرسم ---
+        function draw() {
+            // رسم السماء
+            ctx.fillStyle = '#72a7ff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // رسم البلوكات الظاهرة فقط (Culling)
+            let sx = Math.floor(camera.x / blockSize);
+            let ex = sx + Math.ceil(canvas.width / blockSize) + 1;
+            let sy = Math.max(0, Math.floor(camera.y / blockSize));
+            let ey = Math.min(worldHeight, sy + Math.ceil(canvas.height / blockSize) + 1);
+
+            for (let x = sx; x < ex; x++) {
+                if (!world[x]) continue;
+                for (let y = sy; y < ey; y++) {
+                    if (world[x][y] !== 0) {
+                        ctx.fillStyle = blockColors[world[x][y]];
+                        ctx.fillRect(x * blockSize - camera.x, y * blockSize - camera.y, blockSize, blockSize);
+                        // تفاصيل الحواف
+                        ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+                        ctx.strokeRect(x * blockSize - camera.x, y * blockSize - camera.y, blockSize, blockSize);
+                    }
+                }
+            }
+
+            // رسم ستيف (الشخصية)
+            const px = player.x - camera.x;
+            const py = player.y - camera.y;
+            
+            // قميص أزرق
+            ctx.fillStyle = '#3c5fa2';
+            ctx.fillRect(px, py + 10, player.w, 20);
+            // رأس (لون البشرة)
+            ctx.fillStyle = '#f9cb9c';
+            ctx.fillRect(px + 3, py, 16, 10);
+            // بنطلون بني
+            ctx.fillStyle = '#4a3022';
+            ctx.fillRect(px, py + 30, player.w, 10);
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+        
+        generateWorld();
+        gameLoop();
+    </script>
+</body>
+</html>

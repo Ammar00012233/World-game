@@ -1,252 +1,75 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>ماينكرافت 2D</title>
-
-<style>
-    body {
-        margin: 0;
-        overflow: hidden;
-        background: #72a7ff;
-        touch-action: none;
-        font-family: Arial;
-    }
-    canvas {
-        display: block;
-        image-rendering: pixelated;
-    }
-
-    .controls {
-        position: fixed;
-        bottom: 25px;
-        left: 0;
-        right: 0;
-        display: flex;
-        justify-content: space-between;
-        padding: 0 30px;
-        z-index: 10;
-        pointer-events: none;
-    }
-
-    .group {
-        display: flex;
-        gap: 15px;
-        pointer-events: auto;
-    }
-
-    .btn {
-        width: 70px;
-        height: 70px;
-        background: rgba(0,0,0,0.6);
-        border-radius: 18px;
-        color: white;
-        font-size: 28px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        user-select: none;
-    }
-</style>
-</head>
-
-<body>
-
-<canvas id="gameCanvas"></canvas>
-
-<div class="controls">
-    <div class="group">
-        <div class="btn" id="leftBtn">◀</div>
-        <div class="btn" id="rightBtn">▶</div>
-    </div>
-    <div class="group">
-        <div class="btn" id="jumpBtn">⬆</div>
-    </div>
-</div>
-
-<script>
-/* ================== الإعداد ================== */
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
-canvas.width = innerWidth;
-canvas.height = innerHeight;
-
-const blockSize = 32;
-const worldWidth = 200;
-const worldHeight = 40;
-
-const colors = {
-    1: "#59a135",
-    2: "#866043",
-    3: "#7a7a7a"
-};
-
-let world = [];
-let camera = { x: 0, y: 0 };
-
-let player = {
-    x: 50 * blockSize,
-    y: 10 * blockSize,
-    w: 22,
-    h: 40,
-    vx: 0,
-    vy: 0,
-    speed: 4,
-    jump: -12,
-    onGround: false
-};
-
-/* ================== التحكم ================== */
-let moveL = false, moveR = false, moveJ = false;
-
-const bind = (id, on, off) => {
-    const el = document.getElementById(id);
-    el.onpointerdown = e => { e.preventDefault(); on(); };
-    el.onpointerup = off;
-    el.onpointerleave = off;
-};
-
-bind("leftBtn", () => moveL = true, () => moveL = false);
-bind("rightBtn", () => moveR = true, () => moveR = false);
-bind("jumpBtn", () => moveJ = true, () => moveJ = false);
-
-/* ================== توليد العالم ================== */
-function generateWorld() {
-    for (let x = 0; x < worldWidth; x++) {
-        world[x] = [];
-        let ground = 20 + Math.floor(Math.sin(x * 0.15) * 5);
-        for (let y = 0; y < worldHeight; y++) {
-            if (y === ground) world[x][y] = 1;
-            else if (y > ground) world[x][y] = 2;
-            else world[x][y] = 0;
-        }
-    }
-}
-
-/* ================== التصادم (متصلح) ================== */
-function checkCollision(horizontal) {
-    let l = Math.floor(player.x / blockSize);
-    let r = Math.floor((player.x + player.w) / blockSize);
-    let t = Math.floor(player.y / blockSize);
-    let b = Math.floor((player.y + player.h) / blockSize);
-
-    for (let x = l; x <= r; x++) {
-        for (let y = t; y <= b; y++) {
-            if (!world[x] || world[x][y] === 0) continue;
-
-            if (horizontal) {
-                if (player.vx > 0) player.x = x * blockSize - player.w;
-                else if (player.vx < 0) player.x = (x + 1) * blockSize;
-                player.vx = 0;
-                return;
-            } else {
-                if (player.vy > 0) {
-                    player.y = y * blockSize - player.h;
-                    player.vy = 0;
-                    player.onGround = true;
-                } else if (player.vy < 0) {
-                    player.y = (y + 1) * blockSize;
-                    player.vy = 0;
+for (let x = l; x <= r; x++) {
+                for (let y = t; y <= b; y++) {
+                    if (world[x] && world[x][y] !== 0) {
+                        if (horizontal) {
+                            if (player.vx > 0) player.x = x * blockSize - player.w;
+                            if (player.vx < 0) player.x = (x + 1) * blockSize;
+                            player.vx = 0;
+                        } else {
+                            if (player.vy > 0) {
+                                player.y = y * blockSize - player.h;
+                                player.onGround = true;
+                                player.vy = 0;
+                            } else if (player.vy < 0) {
+                                player.y = (y + 1) * blockSize;
+                                player.vy = 0;
+                            }
+                        }
+                    }
                 }
-                return;
             }
         }
-    }
-}
 
-/* ================== التحديث ================== */
-function update() {
-    if (moveL) player.vx = -player.speed;
-    else if (moveR) player.vx = player.speed;
-    else player.vx = 0;
+        // --- الرسم ---
+        function draw() {
+            // رسم السماء
+            ctx.fillStyle = '#72a7ff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    if (moveJ && player.onGround) {
-        player.vy = player.jump;
-        player.onGround = false;
-    }
+            // رسم البلوكات الظاهرة فقط (Culling)
+            let sx = Math.floor(camera.x / blockSize);
+            let ex = sx + Math.ceil(canvas.width / blockSize) + 1;
+            let sy = Math.max(0, Math.floor(camera.y / blockSize));
+            let ey = Math.min(worldHeight, sy + Math.ceil(canvas.height / blockSize) + 1);
 
-    player.vy += 0.8;
-
-    player.x += player.vx;
-    checkCollision(true);
-
-    player.y += player.vy;
-    checkCollision(false);
-
-    camera.x = player.x - canvas.width / 2;
-    camera.y = player.y - canvas.height / 2;
-}
-
-/* ================== الرسم ================== */
-function draw() {
-    ctx.fillStyle = "#72a7ff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    let sx = Math.floor(camera.x / blockSize);
-    let ex = sx + Math.ceil(canvas.width / blockSize);
-
-    for (let x = sx; x < ex; x++) {
-        if (!world[x]) continue;
-        for (let y = 0; y < worldHeight; y++) {
-            if (world[x][y] !== 0) {
-                ctx.fillStyle = colors[world[x][y]];
-                ctx.fillRect(
-                    x * blockSize - camera.x,
-                    y * blockSize - camera.y,
-                    blockSize,
-                    blockSize
-                );
+            for (let x = sx; x < ex; x++) {
+                if (!world[x]) continue;
+                for (let y = sy; y < ey; y++) {
+                    if (world[x][y] !== 0) {
+                        ctx.fillStyle = blockColors[world[x][y]];
+                        ctx.fillRect(x * blockSize - camera.x, y * blockSize - camera.y, blockSize, blockSize);
+                        // تفاصيل الحواف
+                        ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+                        ctx.strokeRect(x * blockSize - camera.x, y * blockSize - camera.y, blockSize, blockSize);
+                    }
+                }
             }
+
+            // رسم ستيف (الشخصية)
+            const px = player.x - camera.x;
+            const py = player.y - camera.y;
+            
+            // قميص أزرق
+            ctx.fillStyle = '#3c5fa2';
+            ctx.fillRect(px, py + 10, player.w, 20);
+            // رأس (لون البشرة)
+            ctx.fillStyle = '#f9cb9c';
+            ctx.fillRect(px + 3, py, 16, 10);
+            // بنطلون بني
+            ctx.fillStyle = '#4a3022';
+            ctx.fillRect(px, py + 30, player.w, 10);
         }
-    }
 
-    ctx.fillStyle = "#3c5fa2";
-    ctx.fillRect(
-        player.x - camera.x,
-        player.y - camera.y,
-        player.w,
-        player.h
-    );
-}
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
 
-/* ================== الحفظ ================== */
-function saveGame() {
-    localStorage.setItem("world", JSON.stringify(world));
-    localStorage.setItem("player", JSON.stringify({ x: player.x, y: player.y }));
-}
-
-function loadGame() {
-    let w = localStorage.getItem("world");
-    let p = localStorage.getItem("player");
-
-    if (w && p) {
-        world = JSON.parse(w);
-        let pos = JSON.parse(p);
-        player.x = pos.x;
-        player.y = pos.y;
-    } else {
+        window.onresize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+        
         generateWorld();
-    }
-}
-
-setInterval(saveGame, 3000);
-
-/* ================== اللوب ================== */
-function loop() {
-    update();
-    draw();
-    requestAnimationFrame(loop);
-}
-
-loadGame();
-loop();
-
-onresize = () => {
-    canvas.width = innerWidth;
-    canvas.height = innerHeight;
-};
-</script>
-
+        gameLoop();
+    </script>
 </body>
 </html>
